@@ -1,5 +1,6 @@
 package com.appiadev.ituneschallenge.ui.main.adapter
 
+import android.os.Build
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -10,12 +11,24 @@ import com.bumptech.glide.Glide
 import kotlinx.android.synthetic.main.item_layout.view.*
 
 
-class MainAdapter(private val users: ArrayList<ResultAlbum>) : RecyclerView.Adapter<MainAdapter.DataViewHolder>() {
+class MainAdapter(
+    private val users: ArrayList<ResultAlbum>,
+    private val onClickListener: View.OnClickListener,
+    private val onContextClickListener: View.OnContextClickListener
+    ) : RecyclerView.Adapter<MainAdapter.DataViewHolder>() {
 
     class DataViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
-        fun bind(album: ResultAlbum) {
+        fun bind(
+            album: ResultAlbum,
+            onClickListener: View.OnClickListener,
+            onContextClickListener: View.OnContextClickListener
+        ) {
             itemView.apply {
+                setOnClickListener(onClickListener)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    setOnContextClickListener(onContextClickListener)
+                }
                 track_name.text = album.trackName
                 album_band_name.text = album.artistName
                 Glide.with(itemView.context)
@@ -31,7 +44,7 @@ class MainAdapter(private val users: ArrayList<ResultAlbum>) : RecyclerView.Adap
     override fun getItemCount(): Int = users.size
 
     override fun onBindViewHolder(holder: DataViewHolder, position: Int) {
-        holder.bind(users[position])
+        holder.bind(users[position],onClickListener,onContextClickListener)
     }
 
     fun addUsers(users: List<ResultAlbum>) {
@@ -39,6 +52,5 @@ class MainAdapter(private val users: ArrayList<ResultAlbum>) : RecyclerView.Adap
             clear()
             addAll(users)
         }
-
     }
 }

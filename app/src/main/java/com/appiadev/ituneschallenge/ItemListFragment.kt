@@ -1,20 +1,29 @@
 package com.appiadev.ituneschallenge
 
-import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.findNavController
+import androidx.recyclerview.widget.DividerItemDecoration
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.appiadev.ituneschallenge.data.api.ApiHelper
+import com.appiadev.ituneschallenge.data.api.ApiService
+import com.appiadev.ituneschallenge.data.api.RetrofitBuilder
+import com.appiadev.ituneschallenge.data.model.iTunesResponse
 import com.appiadev.ituneschallenge.placeholder.PlaceholderContent;
 import com.appiadev.ituneschallenge.databinding.FragmentItemListBinding
-import com.appiadev.ituneschallenge.databinding.ItemListContentBinding
+import com.appiadev.ituneschallenge.ui.base.ViewModelFactory
+import com.appiadev.ituneschallenge.ui.main.adapter.MainAdapter
+import com.appiadev.ituneschallenge.ui.main.viewmodel.MainViewModel
+import com.appiadev.ituneschallenge.utils.Status
 
 /**
  * A Fragment representing a list of Pings. This fragment
@@ -55,6 +64,10 @@ class ItemListFragment : Fragment() {
 
     private var _binding: FragmentItemListBinding? = null
 
+    private lateinit var viewModel: MainViewModel
+    private lateinit var adapter: MainAdapter
+    var onClickListener : View.OnClickListener? = null
+    var onContextClickListener : View.OnContextClickListener? = null
     // This property is only valid between onCreateView and
     // onDestroyView.
     private val binding get() = _binding!!
@@ -75,7 +88,6 @@ class ItemListFragment : Fragment() {
         ViewCompat.addOnUnhandledKeyEventListener(view, unhandledKeyEventListenerCompat)
 
         val recyclerView: RecyclerView = binding.itemList
-
         // Leaving this not using view binding as it relies on if the view is visible the current
         // layout configuration (layout, layout-sw600dp)
         val itemDetailFragmentContainer: View? = view.findViewById(R.id.item_detail_nav_container)
@@ -83,7 +95,7 @@ class ItemListFragment : Fragment() {
         /** Click Listener to trigger navigation based on if you have
          * a single pane layout or two pane layout
          */
-        val onClickListener = View.OnClickListener { itemView ->
+        onClickListener = View.OnClickListener { itemView ->
             val item = itemView.tag as PlaceholderContent.PlaceholderItem
             val bundle = Bundle()
             bundle.putString(
@@ -103,7 +115,7 @@ class ItemListFragment : Fragment() {
          * from mice and trackpad input to provide a more native
          * experience on larger screen devices
          */
-        val onContextClickListener = View.OnContextClickListener { v ->
+        onContextClickListener = View.OnContextClickListener { v ->
             val item = v.tag as PlaceholderContent.PlaceholderItem
             Toast.makeText(
                 v.context,
@@ -112,59 +124,64 @@ class ItemListFragment : Fragment() {
             ).show()
             true
         }
-        setupRecyclerView(recyclerView, onClickListener, onContextClickListener)
+
+        setupViewModel()
+        setupObservers(recyclerView)
     }
 
-    private fun setupRecyclerView(
-        recyclerView: RecyclerView,
-        onClickListener: View.OnClickListener,
-        onContextClickListener: View.OnContextClickListener
-    ) {
-
-        recyclerView.adapter = SimpleItemRecyclerViewAdapter(
-            PlaceholderContent.ITEMS,
-            onClickListener,
-            onContextClickListener
-        )
+    private fun setupViewModel() {
+        val apiService: ApiService = RetrofitBuilder.getRetrofit().create(ApiService::class.java)
+        viewModel = ViewModelProvider(
+            this,
+            ViewModelFactory(ApiHelper(apiService))
+        ).get(MainViewModel::class.java)
     }
 
-    class SimpleItemRecyclerViewAdapter(
-        private val values: List<PlaceholderContent.PlaceholderItem>,
-        private val onClickListener: View.OnClickListener,
-        private val onContextClickListener: View.OnContextClickListener
-    ) :
-        RecyclerView.Adapter<SimpleItemRecyclerViewAdapter.ViewHolder>() {
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-
-            val binding =
-                ItemListContentBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-            return ViewHolder(binding)
-
-        }
-
-        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val item = values[position]
-            holder.idView.text = item.id
-            holder.contentView.text = item.content
-
-            with(holder.itemView) {
-                tag = item
-                setOnClickListener(onClickListener)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    setOnContextClickListener(onContextClickListener)
+    private fun setupObservers(recyclerView: RecyclerView) {
+        viewModel.getSongs().observe(viewLifecycleOwner, Observer {
+            it?.let { resource ->
+                when (resource.status) {
+                    Status.SUCCESS -> {
+                        recyclerView.visibility = View.VISIBLE
+                        //progressBar.visibility = View.GONE
+                        resource.data?.let { response -> retrieveList(response,recyclerView) }
+                    }
+                    Status.ERROR -> {
+                        recyclerView.visibility = View.VISIBLE
+                        //progressBar.visibility = View.GONE
+                        //Toast.makeText(this, it.message, Toast.LENGTH_LONG).show()
+                    }
+                    Status.LOADING -> {
+                        //progressBar.visibility = View.VISIBLE
+                        recyclerView.visibility = View.GONE
+                    }
                 }
             }
+        })
+    }
+
+    private fun retrieveList(response: iTunesResponse, recyclerView: RecyclerView) {
+        adapter = MainAdapter(arrayListOf(),onClickListener!!,onContextClickListener!!)
+
+        adapter.apply {
+            addUsers(response.results)
+            notifyDataSetChanged()
         }
 
-        override fun getItemCount() = values.size
-
-        inner class ViewHolder(binding: ItemListContentBinding) :
-            RecyclerView.ViewHolder(binding.root) {
-            val idView: TextView = binding.idText
-            val contentView: TextView = binding.content
-        }
-
+        setupRecyclerView(recyclerView, adapter)
+    }
+    private fun setupRecyclerView(
+        recyclerView: RecyclerView,
+        adapter: MainAdapter,
+    ) {
+        recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.addItemDecoration(
+            DividerItemDecoration(
+                recyclerView.context,
+                (recyclerView.layoutManager as LinearLayoutManager).orientation
+            )
+        )
+        recyclerView.adapter = adapter
     }
 
     override fun onDestroyView() {
