@@ -1,6 +1,5 @@
 package com.appiadev.ituneschallenge.data.api
 
-import com.appiadev.ituneschallenge.data.model.ItunesResponse
 import retrofit2.http.GET
 import retrofit2.http.Query
 
